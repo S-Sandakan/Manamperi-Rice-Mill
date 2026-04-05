@@ -1,216 +1,192 @@
-import { useState } from 'react';
-import { reportsAPI } from '../services/api';
+import { useState, useEffect } from 'react';
+import api from '../api/axios';
 import toast from 'react-hot-toast';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import {
+    HiOutlineArrowDownTray,
+    HiOutlineBanknotes,
+    HiOutlineShoppingCart,
+    HiOutlineTruck,
+} from 'react-icons/hi2';
+import {
+    BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
+    ResponsiveContainer, CartesianGrid, Legend,
+} from 'recharts';
+import StatsCard from '../components/StatsCard';
 
-const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
+export default function Reports() {
+    const [daily, setDaily] = useState([]);
+    const [monthly, setMonthly] = useState([]);
+    const [profit, setProfit] = useState(null);
+    const [activeTab, setActiveTab] = useState('daily');
+    const [loading, setLoading] = useState(true);
 
-const Reports = () => {
-    const [activeTab, setActiveTab] = useState('sales');
-    const [from, setFrom] = useState(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-    const [to, setTo] = useState(new Date().toISOString().split('T')[0]);
-    const [period, setPeriod] = useState('daily');
-    const [data, setData] = useState([]);
-    const [profitData, setProfitData] = useState(null);
-    const [loading, setLoading] = useState(false);
+    useEffect(() => { load(); }, []);
 
-    const loadReport = async () => {
-        setLoading(true);
+    const load = async () => {
         try {
-            if (activeTab === 'sales') {
-                const res = await reportsAPI.salesReport({ from, to, period });
-                setData(res.data);
-            } else if (activeTab === 'purchases') {
-                const res = await reportsAPI.purchaseReport({ from, to });
-                setData(res.data);
-            } else if (activeTab === 'profit') {
-                const res = await reportsAPI.profitReport({ from, to });
-                setProfitData(res.data);
-            }
-        } catch (err) {
-            toast.error('Failed to load report');
-        } finally {
-            setLoading(false);
+            const [dailyRes, monthlyRes, profitRes] = await Promise.all([
+                api.get('/reports/daily/'),
+                api.get('/reports/monthly/'),
+                api.get('/reports/profit/'),
+            ]);
+            setDaily(dailyRes.data);
+            setMonthly(monthlyRes.data);
+            setProfit(profitRes.data);
+        } catch { toast.error('Failed to load reports'); }
+        finally { setLoading(false); }
+    };
+
+    const fmt = (v) => `Rs. ${Number(v || 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`;
+
+    const exportExcel = async () => {
+        try {
+            const response = await api.get('/reports/export/sales/', { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'Sales_Report.xlsx');
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            toast.success('Report downloaded');
+        } catch {
+            toast.error('Export failed');
         }
     };
 
-    const tabs = [
-        { id: 'sales', label: 'Sales Report' },
-        { id: 'purchases', label: 'Purchase Report' },
-        { id: 'profit', label: 'Profit Summary' },
-    ];
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-[60vh]">
+                <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-gray-800">Reports</h1>
-                <p className="text-gray-500 text-sm">Analytics and business reports</p>
+        <div>
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-dark-800">Reports</h1>
+                    <p className="text-dark-400 text-sm">Sales, purchases & profit analytics</p>
+                </div>
+                <button onClick={exportExcel} className="btn-secondary flex items-center gap-2" id="export-excel">
+                    <HiOutlineArrowDownTray className="w-4 h-4" /> Export Excel
+                </button>
             </div>
 
+            {/* Profit Summary */}
+            {profit && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+                    <StatsCard title="Rice Sales" value={fmt(profit.rice_sales)} icon={HiOutlineShoppingCart} color="emerald" />
+                    <StatsCard title="Bran Sales" value={fmt(profit.bran_sales)} icon={HiOutlineBanknotes} color="amber" />
+                    <StatsCard title="Paddy Cost" value={fmt(profit.paddy_cost)} icon={HiOutlineTruck} color="rose" />
+                    <StatsCard
+                        title="Gross Profit"
+                        value={fmt(profit.gross_profit)}
+                        subtitle={profit.period}
+                        icon={HiOutlineBanknotes}
+                        color={profit.gross_profit >= 0 ? 'emerald' : 'rose'}
+                    />
+                </div>
+            )}
+
             {/* Tabs */}
-            <div className="flex gap-2">
-                {tabs.map(tab => (
-                    <button key={tab.id} onClick={() => { setActiveTab(tab.id); setData([]); setProfitData(null); }}
-                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${activeTab === tab.id ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
-                        {tab.label}
+            <div className="flex gap-2 mb-5">
+                {[
+                    { key: 'daily', label: 'Daily Sales' },
+                    { key: 'monthly', label: 'Monthly Sales' },
+                ].map(({ key, label }) => (
+                    <button
+                        key={key}
+                        onClick={() => setActiveTab(key)}
+                        className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all
+              ${activeTab === key
+                                ? 'bg-primary-500 text-white shadow-md'
+                                : 'bg-white text-dark-500 border border-dark-200 hover:border-primary-300'}`}
+                    >
+                        {label}
                     </button>
                 ))}
             </div>
 
-            {/* Filters */}
-            <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex flex-wrap items-end gap-4">
-                <div>
-                    <label className="block text-xs text-gray-500 mb-1">From</label>
-                    <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-500" />
-                </div>
-                <div>
-                    <label className="block text-xs text-gray-500 mb-1">To</label>
-                    <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-500" />
-                </div>
-                {activeTab === 'sales' && (
-                    <div>
-                        <label className="block text-xs text-gray-500 mb-1">Period</label>
-                        <select value={period} onChange={(e) => setPeriod(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-500">
-                            <option value="daily">Daily</option>
-                            <option value="monthly">Monthly</option>
-                        </select>
-                    </div>
-                )}
-                <button onClick={loadReport} disabled={loading} className="px-6 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">
-                    {loading ? 'Loading...' : 'Generate Report'}
-                </button>
-            </div>
-
-            {/* Sales Report */}
-            {activeTab === 'sales' && data.length > 0 && (
-                <div className="space-y-6">
-                    <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                        <h3 className="font-semibold text-gray-800 mb-4">Revenue Trend</h3>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={data}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                                <YAxis tick={{ fontSize: 11 }} />
-                                <Tooltip formatter={(v) => `Rs. ${Number(v).toLocaleString()}`} />
-                                <Bar dataKey="revenue" fill="#22c55e" radius={[4, 4, 0, 0]} />
+            {/* Charts */}
+            <div className="glass-card p-6">
+                {activeTab === 'daily' && (
+                    <>
+                        <h2 className="text-lg font-bold text-dark-800 mb-4">Daily Sales — Last 30 Days</h2>
+                        <ResponsiveContainer width="100%" height={400}>
+                            <BarChart data={daily}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                <XAxis
+                                    dataKey="day"
+                                    tick={{ fontSize: 10 }}
+                                    tickFormatter={(v) => new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                />
+                                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                                <Tooltip
+                                    formatter={(v) => [fmt(v), 'Revenue']}
+                                    labelFormatter={(v) => new Date(v).toLocaleDateString()}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
+                                />
+                                <Bar dataKey="total" fill="#f59e0b" radius={[6, 6, 0, 0]} name="Revenue" />
+                                <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Transactions" />
                             </BarChart>
                         </ResponsiveContainer>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <table className="w-full">
-                            <thead className="bg-gray-50"><tr>
-                                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Period</th>
-                                <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Sales</th>
-                                <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Revenue</th>
-                            </tr></thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {data.map((row, i) => (
-                                    <tr key={i} className="hover:bg-gray-50">
-                                        <td className="px-5 py-3 text-sm">{row.period}</td>
-                                        <td className="px-5 py-3 text-sm text-right">{row.total_sales}</td>
-                                        <td className="px-5 py-3 text-sm text-right font-semibold text-green-600">Rs. {Number(row.revenue).toLocaleString()}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
+                    </>
+                )}
 
-            {/* Purchase Report */}
-            {activeTab === 'purchases' && data.length > 0 && (
-                <div className="space-y-6">
-                    <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                        <h3 className="font-semibold text-gray-800 mb-4">Purchase Trend</h3>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <LineChart data={data}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                                <YAxis tick={{ fontSize: 11 }} />
-                                <Tooltip formatter={(v) => Number(v).toLocaleString()} />
-                                <Line type="monotone" dataKey="total_weight" stroke="#f59e0b" strokeWidth={2} name="Weight (kg)" />
-                                <Line type="monotone" dataKey="total_cost" stroke="#ef4444" strokeWidth={2} name="Cost (Rs.)" />
+                {activeTab === 'monthly' && (
+                    <>
+                        <h2 className="text-lg font-bold text-dark-800 mb-4">Monthly Sales — Last 12 Months</h2>
+                        <ResponsiveContainer width="100%" height={400}>
+                            <LineChart data={monthly}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                                <Tooltip
+                                    formatter={(v) => [fmt(v), 'Revenue']}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
+                                />
+                                <Legend />
+                                <Line type="monotone" dataKey="total" stroke="#f59e0b" strokeWidth={3}
+                                    dot={{ r: 5, fill: '#f59e0b' }} name="Revenue" />
+                                <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2}
+                                    dot={{ r: 4, fill: '#3b82f6' }} name="Transactions" />
                             </LineChart>
                         </ResponsiveContainer>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <table className="w-full">
-                            <thead className="bg-gray-50"><tr>
-                                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
-                                <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Purchases</th>
-                                <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Weight</th>
-                                <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Cost</th>
-                            </tr></thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {data.map((row, i) => (
-                                    <tr key={i} className="hover:bg-gray-50">
-                                        <td className="px-5 py-3 text-sm">{row.date}</td>
-                                        <td className="px-5 py-3 text-sm text-right">{row.purchases}</td>
-                                        <td className="px-5 py-3 text-sm text-right">{Number(row.total_weight).toLocaleString()} kg</td>
-                                        <td className="px-5 py-3 text-sm text-right font-semibold text-red-600">Rs. {Number(row.total_cost).toLocaleString()}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
+                    </>
+                )}
+            </div>
 
-            {/* Profit Report */}
-            {activeTab === 'profit' && profitData && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-                        <h3 className="font-semibold text-gray-800 mb-4">Revenue Breakdown</h3>
-                        <ResponsiveContainer width="100%" height={250}>
-                            <PieChart>
-                                <Pie data={[
-                                    { name: 'Rice Sales', value: profitData.rice_sales_revenue },
-                                    { name: 'Bran Sales', value: profitData.bran_sales_revenue },
-                                ]} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                                    {[0, 1].map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
-                                </Pie>
-                                <Tooltip formatter={(v) => `Rs. ${Number(v).toLocaleString()}`} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
-                        <h3 className="font-semibold text-gray-800">Profit Summary</h3>
-                        <div className="space-y-3">
-                            <div className="flex justify-between p-3 bg-green-50 rounded-lg">
-                                <span className="text-sm text-gray-600">Rice Sales Revenue</span>
-                                <span className="font-semibold text-green-600">Rs. {Number(profitData.rice_sales_revenue).toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between p-3 bg-blue-50 rounded-lg">
-                                <span className="text-sm text-gray-600">Bran Sales Revenue</span>
-                                <span className="font-semibold text-blue-600">Rs. {Number(profitData.bran_sales_revenue).toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between p-3 bg-gray-50 rounded-lg">
-                                <span className="text-sm text-gray-600">Total Revenue</span>
-                                <span className="font-bold text-gray-800">Rs. {Number(profitData.total_revenue).toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between p-3 bg-red-50 rounded-lg">
-                                <span className="text-sm text-gray-600">Paddy Purchase Cost</span>
-                                <span className="font-semibold text-red-600">Rs. {Number(profitData.paddy_purchase_cost).toLocaleString()}</span>
-                            </div>
-                            <div className={`flex justify-between p-4 rounded-lg ${profitData.gross_profit >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
-                                <span className="font-bold text-gray-800">Gross Profit</span>
-                                <span className={`text-xl font-bold ${profitData.gross_profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                                    Rs. {Number(profitData.gross_profit).toLocaleString()}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
+            {/* Data Table */}
+            <div className="glass-card p-5 mt-5">
+                <h2 className="text-lg font-bold text-dark-800 mb-4">
+                    {activeTab === 'daily' ? 'Daily Breakdown' : 'Monthly Breakdown'}
+                </h2>
+                <div className="overflow-x-auto">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>{activeTab === 'daily' ? 'Date' : 'Month'}</th>
+                                <th>Transactions</th>
+                                <th>Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {(activeTab === 'daily' ? daily : monthly).map((row, idx) => (
+                                <tr key={idx}>
+                                    <td className="font-semibold">{row.day || row.month}</td>
+                                    <td><span className="badge-info">{row.count}</span></td>
+                                    <td className="font-semibold">{fmt(row.total)}</td>
+                                </tr>
+                            ))}
+                            {(activeTab === 'daily' ? daily : monthly).length === 0 && (
+                                <tr><td colSpan={3} className="text-center py-8 text-dark-400">No data available</td></tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
-            )}
-
-            {/* Empty state */}
-            {!loading && data.length === 0 && !profitData && (
-                <div className="bg-white rounded-xl p-12 shadow-sm border border-gray-100 text-center">
-                    <p className="text-gray-400">Select date range and click "Generate Report" to view data</p>
-                </div>
-            )}
+            </div>
         </div>
     );
-};
-
-export default Reports;
+}

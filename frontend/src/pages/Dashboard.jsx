@@ -1,136 +1,231 @@
 import { useState, useEffect } from 'react';
-import { reportsAPI } from '../services/api';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { HiOutlineBanknotes, HiOutlineTruck, HiOutlineCube, HiOutlineExclamationTriangle } from 'react-icons/hi2';
+import api from '../api/axios';
+import StatsCard from '../components/StatsCard';
+import {
+    HiOutlineBanknotes,
+    HiOutlineShoppingCart,
+    HiOutlineTruck,
+    HiOutlineExclamationTriangle,
+    HiOutlineCube,
+    HiOutlineArchiveBox,
+} from 'react-icons/hi2';
+import {
+    BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from 'recharts';
 
-const Dashboard = () => {
-    const [data, setData] = useState(null);
+export default function Dashboard() {
+    const [stats, setStats] = useState(null);
+    const [dailySales, setDailySales] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
-        loadDashboard();
+        loadData();
     }, []);
 
-    const loadDashboard = async () => {
+    const loadData = async () => {
         try {
-            const res = await reportsAPI.getDashboard();
-            setData(res.data);
+            setLoading(true);
+            setError(null);
+
+            // Load dashboard stats
+            const statsRes = await api.get('/reports/dashboard/');
+            setStats(statsRes.data);
+
+            // Load daily sales separately so dashboard still works if this fails
+            try {
+                const dailyRes = await api.get('/reports/daily/');
+                setDailySales(dailyRes.data || []);
+            } catch (dailyErr) {
+                console.error('Daily sales load failed:', dailyErr);
+                setDailySales([]);
+            }
         } catch (err) {
-            console.error('Dashboard error:', err);
+            console.error('Dashboard load failed:', err);
+            setError(err?.response?.data?.error || err.message || 'Failed to load dashboard');
         } finally {
             setLoading(false);
         }
     };
 
+    const fmt = (v) =>
+        `Rs. ${Number(v || 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`;
+
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-600"></div>
+            <div className="flex items-center justify-center h-[60vh]">
+                <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
             </div>
         );
     }
 
-    const stats = [
-        {
-            label: "Today's Sales",
-            value: `Rs. ${Number(data?.today_sales_total || 0).toLocaleString()}`,
-            sub: `${data?.today_sales_count || 0} transactions`,
-            icon: HiOutlineBanknotes,
-            color: 'bg-blue-500',
-            bgColor: 'bg-blue-50',
-        },
-        {
-            label: 'Paddy Purchased',
-            value: `${Number(data?.total_paddy_purchased || 0).toLocaleString()} kg`,
-            sub: 'Total purchased',
-            icon: HiOutlineTruck,
-            color: 'bg-amber-500',
-            bgColor: 'bg-amber-50',
-        },
-        {
-            label: 'Rice Stock',
-            value: `${Number(data?.rice_stock || 0).toLocaleString()} kg`,
-            sub: 'Available',
-            icon: HiOutlineCube,
-            color: 'bg-green-500',
-            bgColor: 'bg-green-50',
-        },
-        {
-            label: 'Bran Stock',
-            value: `${Number(data?.bran_stock || 0).toLocaleString()} kg`,
-            sub: 'Available',
-            icon: HiOutlineCube,
-            color: 'bg-purple-500',
-            bgColor: 'bg-purple-50',
-        },
-    ];
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+                <HiOutlineExclamationTriangle className="w-12 h-12 text-red-400" />
+                <p className="text-dark-500 text-lg">Failed to load dashboard</p>
+                <p className="text-dark-400 text-sm">{error}</p>
+                <button onClick={loadData} className="btn-primary mt-2">
+                    Retry
+                </button>
+            </div>
+        );
+    }
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-                <p className="text-gray-500 text-sm">Welcome to Manamperi Rice Mill Management System</p>
+        <div>
+            <div className="mb-6">
+                <h1 className="text-2xl font-bold text-dark-800">Dashboard</h1>
+                <p className="text-dark-400 text-sm">Welcome to Manamperi Rice Mill</p>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                {stats.map((stat, i) => (
-                    <div key={i} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between mb-3">
-                            <div className={`${stat.bgColor} p-2.5 rounded-lg`}>
-                                <stat.icon className={`w-5 h-5 ${stat.color.replace('bg-', 'text-')}`} />
-                            </div>
-                        </div>
-                        <p className="text-2xl font-bold text-gray-800">{stat.value}</p>
-                        <p className="text-sm text-gray-500 mt-1">{stat.label}</p>
-                        <p className="text-xs text-gray-400">{stat.sub}</p>
-                    </div>
-                ))}
+            {/* Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+                <StatsCard
+                    title="Today's Sales"
+                    value={fmt(stats?.today_sales?.total)}
+                    subtitle={`${stats?.today_sales?.count || 0} transactions`}
+                    icon={HiOutlineBanknotes}
+                    color="emerald"
+                />
+                <StatsCard
+                    title="Monthly Sales"
+                    value={fmt(stats?.month_sales?.total)}
+                    subtitle={`${stats?.month_sales?.count || 0} transactions`}
+                    icon={HiOutlineShoppingCart}
+                    color="sky"
+                />
+                <StatsCard
+                    title="Paddy Purchased"
+                    value={`${Number(stats?.month_paddy?.quantity || 0).toLocaleString()} kg`}
+                    subtitle={fmt(stats?.month_paddy?.total)}
+                    icon={HiOutlineTruck}
+                    color="amber"
+                />
+                <StatsCard
+                    title="Low Stock Alerts"
+                    value={stats?.low_stock_count || 0}
+                    subtitle="Products need restocking"
+                    icon={HiOutlineExclamationTriangle}
+                    color="rose"
+                />
             </div>
 
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                 {/* Sales Chart */}
-                <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                    <h3 className="font-semibold text-gray-800 mb-4">Sales (Last 7 Days)</h3>
-                    <ResponsiveContainer width="100%" height={280}>
-                        <BarChart data={data?.sales_chart || []}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                            <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                            <YAxis tick={{ fontSize: 12 }} />
-                            <Tooltip formatter={(v) => `Rs. ${Number(v).toLocaleString()}`} />
-                            <Bar dataKey="total" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-
-                {/* Low Stock Alerts */}
-                <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                    <div className="flex items-center gap-2 mb-4">
-                        <HiOutlineExclamationTriangle className="w-5 h-5 text-amber-500" />
-                        <h3 className="font-semibold text-gray-800">Low Stock Alerts</h3>
-                    </div>
-                    {data?.low_stock_alerts?.length > 0 ? (
-                        <div className="space-y-3">
-                            {data.low_stock_alerts.map((item, i) => (
-                                <div key={i} className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100">
-                                    <div>
-                                        <p className="font-medium text-gray-800">{item.name}</p>
-                                        <p className="text-xs text-gray-500">Threshold: {item.low_stock_threshold} kg</p>
-                                    </div>
-                                    <span className="text-lg font-bold text-amber-600">{item.stock_kg} kg</span>
-                                </div>
-                            ))}
-                        </div>
+                <div className="lg:col-span-2 glass-card p-6">
+                    <h2 className="text-lg font-bold text-dark-800 mb-4">Daily Sales (Last 30 Days)</h2>
+                    {dailySales.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={dailySales}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                <XAxis
+                                    dataKey="day"
+                                    tick={{ fontSize: 11 }}
+                                    tickFormatter={(v) => {
+                                        try {
+                                            return new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                        } catch {
+                                            return v;
+                                        }
+                                    }}
+                                />
+                                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                                <Tooltip
+                                    formatter={(v) => [fmt(v), 'Revenue']}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
+                                />
+                                <Bar dataKey="total" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
                     ) : (
-                        <div className="flex items-center justify-center h-40 text-gray-400">
-                            <p>All stock levels are healthy ✅</p>
+                        <div className="flex items-center justify-center h-[300px] text-dark-400">
+                            <p>No sales data for the last 30 days</p>
                         </div>
                     )}
+                </div>
+
+                {/* Inventory Summary */}
+                <div className="glass-card p-6">
+                    <h2 className="text-lg font-bold text-dark-800 mb-4">Inventory Overview</h2>
+                    <div className="space-y-4">
+                        {stats?.inventory_summary?.map((item) => {
+                            const icons = {
+                                paddy: HiOutlineTruck,
+                                rice: HiOutlineCube,
+                                bran: HiOutlineArchiveBox,
+                                husk: HiOutlineArchiveBox,
+                            };
+                            const colors = {
+                                paddy: 'bg-amber-100 text-amber-600',
+                                rice: 'bg-emerald-100 text-emerald-600',
+                                bran: 'bg-orange-100 text-orange-600',
+                                husk: 'bg-stone-100 text-stone-600',
+                            };
+                            const Icon = icons[item.item_type] || HiOutlineCube;
+                            return (
+                                <div
+                                    key={item.item_type}
+                                    className="flex items-center gap-3 p-3 rounded-xl bg-dark-50 hover:bg-dark-100 transition-colors"
+                                >
+                                    <div className={`p-2.5 rounded-xl ${colors[item.item_type] || 'bg-dark-100 text-dark-600'}`}>
+                                        <Icon className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-semibold text-dark-700 capitalize">{item.item_type}</p>
+                                        <p className="text-xs text-dark-400">{Number(item.total_kg || 0).toLocaleString()} kg</p>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {(!stats?.inventory_summary || stats.inventory_summary.length === 0) && (
+                            <p className="text-sm text-dark-400 text-center py-8">No inventory data yet</p>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Recent Sales */}
+            <div className="glass-card p-6 mt-5">
+                <h2 className="text-lg font-bold text-dark-800 mb-4">Recent Sales</h2>
+                <div className="overflow-x-auto">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>Invoice</th>
+                                <th>Customer</th>
+                                <th>Amount</th>
+                                <th>Payment</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {stats?.recent_sales?.map((sale) => (
+                                <tr key={sale.id}>
+                                    <td className="font-mono text-sm font-semibold text-primary-600">
+                                        {sale.invoice_number}
+                                    </td>
+                                    <td>{sale.customer_name || 'Walk-in'}</td>
+                                    <td className="font-semibold">{fmt(sale.net_amount)}</td>
+                                    <td>
+                                        <span className="badge-info">{sale.payment_method_display || sale.payment_method}</span>
+                                    </td>
+                                    <td className="text-dark-400 text-xs">
+                                        {new Date(sale.created_at).toLocaleDateString()}
+                                    </td>
+                                </tr>
+                            ))}
+                            {(!stats?.recent_sales || stats.recent_sales.length === 0) && (
+                                <tr>
+                                    <td colSpan={5} className="text-center text-dark-400 py-8">
+                                        No sales yet
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     );
-};
-
-export default Dashboard;
+}

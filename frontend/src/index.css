@@ -1,61 +1,153 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ── Global Styles ───────────────────────────────────────────── */
 * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
-  background-color: #f1f5f9;
-  color: #1e293b;
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #f1f5f9;
+    color: #1e293b;
+    -webkit-font-smoothing: antialiased;
 }
 
-/* Custom scrollbar */
+/* ── Scrollbar ───────────────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
+    width: 6px;
+    height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+    background: #f1f5f9;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #94a3b8;
-  border-radius: 3px;
+    background: #94a3b8;
+    border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+    background: #64748b;
 }
 
-/* Print styles */
-@media print {
-  .no-print {
-    display: none !important;
-  }
-  body {
-    background: white;
-  }
+/* ── Glass Card ──────────────────────────────────────────────── */
+.glass-card {
+    @apply bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg border border-white/30;
 }
 
-/* Animations */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+/* ── Gradient Text ───────────────────────────────────────────── */
+.gradient-text {
+    @apply bg-gradient-to-r from-primary-600 to-primary-400 bg-clip-text text-transparent;
 }
 
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
+/* ── Input Focus ─────────────────────────────────────────────── */
+.form-input {
+    @apply w-full px-4 py-2.5 rounded-xl border border-dark-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition-all duration-200 text-sm;
 }
 
-@keyframes slideIn {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
+.form-select {
+    @apply w-full px-4 py-2.5 rounded-xl border border-dark-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition-all duration-200 text-sm appearance-none cursor-pointer;
 }
 
-.animate-slide-in {
-  animation: slideIn 0.3s ease-out;
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn-primary {
+    @apply px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white font-semibold rounded-xl shadow-md hover:from-primary-600 hover:to-primary-700 active:scale-[0.98] transition-all duration-200 text-sm;
+}
+
+.btn-secondary {
+    @apply px-5 py-2.5 bg-dark-800 text-white font-semibold rounded-xl shadow-md hover:bg-dark-700 active:scale-[0.98] transition-all duration-200 text-sm;
+}
+
+.btn-danger {
+    @apply px-5 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold rounded-xl shadow-md hover:from-red-600 hover:to-red-700 active:scale-[0.98] transition-all duration-200 text-sm;
+}
+
+.btn-ghost {
+    @apply px-5 py-2.5 text-dark-600 font-medium rounded-xl hover:bg-dark-100 active:scale-[0.98] transition-all duration-200 text-sm;
+}
+
+/* ── Table ────────────────────────────────────────────────────── */
+.data-table {
+    @apply w-full text-sm;
+}
+
+.data-table thead th {
+    @apply text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-dark-400 bg-dark-50 border-b border-dark-200;
+}
+
+.data-table tbody td {
+    @apply px-4 py-3 border-b border-dark-100;
+}
+
+.data-table tbody tr {
+    @apply hover:bg-primary-50/50 transition-colors duration-150;
+}
+
+/* ── Badge ────────────────────────────────────────────────────── */
+.badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+}
+
+.badge-success {
+    @apply badge bg-emerald-100 text-emerald-700;
+}
+
+.badge-warning {
+    @apply badge bg-amber-100 text-amber-700;
+}
+
+.badge-danger {
+    @apply badge bg-red-100 text-red-700;
+}
+
+.badge-info {
+    @apply badge bg-sky-100 text-sky-700;
+}
+
+/* ── Sidebar Animation ───────────────────────────────────────── */
+.sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl text-dark-300 hover:bg-white/10 hover:text-white transition-all duration-200 text-sm font-medium;
+}
+
+.sidebar-link.active {
+    @apply bg-primary-500/20 text-primary-400 font-semibold;
+}
+
+/* ── Page Transition ─────────────────────────────────────────── */
+.page-enter {
+    animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ── Stat Card Shimmer ───────────────────────────────────────── */
+.stat-card {
+    @apply relative overflow-hidden glass-card p-6;
+}
+
+.stat-card::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full;
+    animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+    100% {
+        transform: translateX(100%);
+    }
 }
