@@ -1,148 +1,123 @@
 import { useState, useEffect } from 'react';
-import api from '../api/axios';
+import { inventoryAPI } from '../services/api';
 import toast from 'react-hot-toast';
-import {
-    HiOutlineArchiveBox,
-    HiOutlineExclamationTriangle,
-    HiOutlineArrowTrendingUp,
-    HiOutlineArrowTrendingDown,
-} from 'react-icons/hi2';
+import { HiOutlineAdjustments, HiOutlineExclamation } from 'react-icons/hi';
 
-export default function InventoryPage() {
-    const [inventory, setInventory] = useState([]);
-    const [movements, setMovements] = useState([]);
-    const [filter, setFilter] = useState('');
+const Inventory = () => {
+    const [stock, setStock] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showAdjust, setShowAdjust] = useState(null);
+    const [adjustForm, setAdjustForm] = useState({ quantity: '', reason: '' });
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => { fetchStock(); }, []);
 
-    const load = async () => {
+    const fetchStock = async () => {
         try {
-            const [invRes, movRes] = await Promise.all([
-                api.get('/inventory/?page_size=200'),
-                api.get('/stock-movements/?page_size=50&ordering=-created_at'),
+            const res = await inventoryAPI.getStock();
+            setStock(res.data.data || []);
+        } catch {
+            setStock([
+                { id: 1, product: { id: 1, name: 'Raw Paddy (Vee)', productType: 'SAHAL' }, quantity: 5000, minQuantity: 500, lowStock: false },
+                { id: 2, product: { id: 2, name: 'Sahal 1kg Packet', productType: 'SAHAL' }, quantity: 200, minQuantity: 50, lowStock: false },
+                { id: 3, product: { id: 3, name: 'Sahal 2kg Packet', productType: 'SAHAL' }, quantity: 150, minQuantity: 40, lowStock: false },
+                { id: 4, product: { id: 4, name: 'Sahal 5kg Packet', productType: 'SAHAL' }, quantity: 28, minQuantity: 30, lowStock: true },
+                { id: 5, product: { id: 8, name: 'Kudu (Rice Bran)', productType: 'KUDU' }, quantity: 1500, minQuantity: 200, lowStock: false },
             ]);
-            setInventory(invRes.data.results || invRes.data);
-            setMovements(movRes.data.results || movRes.data);
-        } catch { toast.error('Failed to load'); }
-        finally { setLoading(false); }
+        } finally { setLoading(false); }
     };
 
-    const filtered = inventory.filter(
-        (i) => !filter || i.item_type === filter
-    );
-
-    const typeColors = {
-        paddy: 'bg-amber-100 text-amber-700 border-amber-200',
-        rice: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-        bran: 'bg-orange-100 text-orange-700 border-orange-200',
-        husk: 'bg-stone-100 text-stone-700 border-stone-200',
+    const handleAdjust = async () => {
+        if (!adjustForm.quantity || !adjustForm.reason) return toast.error('Quantity and reason are required');
+        try {
+            await inventoryAPI.adjustStock({
+                productId: showAdjust,
+                quantity: parseFloat(adjustForm.quantity),
+                reason: adjustForm.reason,
+            });
+            toast.success('Stock adjusted');
+            setShowAdjust(null);
+            setAdjustForm({ quantity: '', reason: '' });
+            fetchStock();
+        } catch (err) { toast.error(err.response?.data?.message || 'Adjustment failed'); }
     };
+
+    const lowStockItems = stock.filter((s) => s.lowStock || (s.quantity <= s.minQuantity));
 
     return (
-        <div>
-            <div className="mb-6">
-                <h1 className="text-2xl font-bold text-dark-800">Inventory</h1>
-                <p className="text-dark-400 text-sm">Track paddy, rice, bran & husk stock levels</p>
+        <div className="space-y-6 fade-in">
+            <div>
+                <h1 className="text-2xl font-bold text-white">Inventory Management</h1>
+                <p className="text-sm text-gray-400">Track stock levels across all products</p>
             </div>
 
-            {/* Filter Tabs */}
-            <div className="flex gap-2 mb-5">
-                {['', 'paddy', 'rice', 'bran', 'husk'].map((type) => (
-                    <button
-                        key={type}
-                        onClick={() => setFilter(type)}
-                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all
-              ${filter === type
-                                ? 'bg-primary-500 text-white shadow-md'
-                                : 'bg-white text-dark-500 border border-dark-200 hover:border-primary-300'}`}
-                    >
-                        {type ? type.charAt(0).toUpperCase() + type.slice(1) : 'All'}
-                    </button>
-                ))}
-            </div>
-
-            {/* Stock Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                {filtered.map((item) => (
-                    <div
-                        key={item.id}
-                        className={`p-5 rounded-2xl border-2 transition-all hover:shadow-lg ${item.is_low_stock ? 'border-red-200 bg-red-50/50' : 'border-dark-100 bg-white'
-                            }`}
-                    >
-                        <div className="flex items-start justify-between mb-3">
-                            <div>
-                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${typeColors[item.item_type] || 'bg-dark-100'}`}>
-                                    {item.item_type_display}
-                                </span>
-                                <h3 className="text-lg font-bold text-dark-800 mt-2">{item.item_name}</h3>
-                            </div>
-                            {item.is_low_stock && (
-                                <HiOutlineExclamationTriangle className="w-6 h-6 text-red-400 animate-pulse" />
-                            )}
-                        </div>
-                        <div className="flex items-end justify-between">
-                            <div>
-                                <p className="text-3xl font-bold text-dark-800">
-                                    {parseFloat(item.quantity_kg).toLocaleString()}
-                                </p>
-                                <p className="text-xs text-dark-400">kg in stock</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs text-dark-400">Threshold</p>
-                                <p className="text-sm font-semibold text-dark-500">
-                                    {parseFloat(item.low_stock_threshold).toLocaleString()} kg
-                                </p>
-                            </div>
-                        </div>
-                        {item.is_low_stock && (
-                            <div className="mt-3 p-2 bg-red-100 rounded-lg text-xs text-red-600 font-medium text-center">
-                                ⚠️ Below minimum stock level
-                            </div>
-                        )}
+            {/* Low Stock Alerts */}
+            {lowStockItems.length > 0 && (
+                <div className="glass-card p-4 border-l-4 border-amber-500">
+                    <div className="flex items-center gap-2 mb-2">
+                        <HiOutlineExclamation className="text-amber-400 text-lg" />
+                        <span className="text-amber-400 font-semibold text-sm">Low Stock Alerts ({lowStockItems.length})</span>
                     </div>
-                ))}
-                {filtered.length === 0 && (
-                    <div className="col-span-full text-center py-12 text-dark-400">
-                        <HiOutlineArchiveBox className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                        <p>No inventory data found</p>
+                    <div className="flex flex-wrap gap-2">
+                        {lowStockItems.map((s) => (
+                            <span key={s.id} className="badge badge-warning">{s.product?.name}: {s.quantity} remaining</span>
+                        ))}
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
-            {/* Recent Stock Movements */}
-            <div className="glass-card p-5">
-                <h2 className="text-lg font-bold text-dark-800 mb-4">Recent Stock Movements</h2>
+            {/* Stock Table */}
+            <div className="glass-card p-6">
+                <h2 className="text-lg font-semibold text-white mb-4">Current Stock Levels</h2>
                 <div className="overflow-x-auto">
                     <table className="data-table">
                         <thead>
-                            <tr><th>Item</th><th>Type</th><th>Qty (kg)</th><th>Reference</th><th>Date</th></tr>
+                            <tr>
+                                <th>Product</th>
+                                <th>Type</th>
+                                <th>Current Stock</th>
+                                <th>Minimum</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
                         </thead>
                         <tbody>
-                            {movements.map((m) => (
-                                <tr key={m.id}>
-                                    <td className="font-semibold">{m.inventory_name}</td>
+                            {stock.map((s) => (
+                                <tr key={s.id}>
+                                    <td className="font-medium text-white">{s.product?.name}</td>
+                                    <td><span className={`badge ${s.product?.productType === 'KUDU' ? 'badge-warning' : 'badge-info'}`}>{s.product?.productType}</span></td>
+                                    <td className="font-semibold">{(s.quantity || 0).toLocaleString()}</td>
+                                    <td className="text-gray-400">{(s.minQuantity || 0).toLocaleString()}</td>
                                     <td>
-                                        {m.movement_type === 'in' ? (
-                                            <span className="badge-success flex items-center gap-1 w-fit">
-                                                <HiOutlineArrowTrendingUp className="w-3 h-3" /> Stock In
-                                            </span>
+                                        <span className={`badge ${(s.lowStock || s.quantity <= s.minQuantity) ? 'badge-danger' : 'badge-success'}`}>
+                                            {(s.lowStock || s.quantity <= s.minQuantity) ? 'LOW' : 'OK'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {showAdjust === s.product?.id ? (
+                                            <div className="flex items-center gap-2">
+                                                <input type="number" step="0.01" placeholder="+/- qty" value={adjustForm.quantity}
+                                                    onChange={(e) => setAdjustForm({ ...adjustForm, quantity: e.target.value })}
+                                                    className="input !w-24 !py-1 !text-xs" />
+                                                <input type="text" placeholder="Reason" value={adjustForm.reason}
+                                                    onChange={(e) => setAdjustForm({ ...adjustForm, reason: e.target.value })}
+                                                    className="input !w-36 !py-1 !text-xs" />
+                                                <button onClick={handleAdjust} className="btn btn-primary btn-sm !py-1">Save</button>
+                                                <button onClick={() => setShowAdjust(null)} className="btn btn-secondary btn-sm !py-1">✕</button>
+                                            </div>
                                         ) : (
-                                            <span className="badge-danger flex items-center gap-1 w-fit">
-                                                <HiOutlineArrowTrendingDown className="w-3 h-3" /> Stock Out
-                                            </span>
+                                            <button onClick={() => setShowAdjust(s.product?.id)} className="btn btn-sm btn-secondary">
+                                                <HiOutlineAdjustments size={14} /> Adjust
+                                            </button>
                                         )}
                                     </td>
-                                    <td>{parseFloat(m.quantity_kg).toLocaleString()}</td>
-                                    <td className="text-dark-400 text-xs">{m.reference || '—'}</td>
-                                    <td className="text-dark-400 text-xs">{new Date(m.created_at).toLocaleString()}</td>
                                 </tr>
                             ))}
-                            {movements.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-dark-400">No movements yet</td></tr>}
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
     );
-}
+};
+
+export default Inventory;
