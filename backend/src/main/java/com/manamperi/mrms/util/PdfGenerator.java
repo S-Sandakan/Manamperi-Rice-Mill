@@ -19,6 +19,7 @@ import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class PdfGenerator {
@@ -138,6 +139,119 @@ public class PdfGenerator {
         } catch (Exception e) {
             throw new RuntimeException("Failed to generate PDF invoice", e);
         }
+    }
+
+    /**
+     * Generate generic PDF report from Map data.
+     */
+    public byte[] generateReportPdf(String title, Map<String, Object> data) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            PdfWriter writer = new PdfWriter(baos);
+            PdfDocument pdfDoc = new PdfDocument(writer);
+            Document doc = new Document(pdfDoc, PageSize.A4);
+            doc.setMargins(40, 40, 40, 40);
+
+            // Header
+            doc.add(new Paragraph("MANAMPERI RICE MILL")
+                    .setFontSize(20).setBold().setFontColor(PRIMARY_COLOR).setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph(title)
+                    .setFontSize(14).setTextAlignment(TextAlignment.CENTER).setFontColor(ColorConstants.GRAY));
+            doc.add(new Paragraph("\n"));
+
+            // Summary Info
+            Table infoTable = new Table(UnitValue.createPercentArray(new float[]{1, 1})).useAllAvailableWidth();
+            
+            for (Map.Entry<String, Object> entry : data.entrySet()) {
+                if (!(entry.getValue() instanceof List) && !(entry.getValue() instanceof Map)) {
+                    infoTable.addCell(createInfoCell(formatLabel(entry.getKey()) + ":", String.valueOf(entry.getValue())));
+                }
+            }
+            doc.add(infoTable);
+            doc.add(new Paragraph("\n"));
+
+            // Tables for List data
+            for (Map.Entry<String, Object> entry : data.entrySet()) {
+                if (entry.getValue() instanceof List) {
+                    List<?> list = (List<?>) entry.getValue();
+                    if (!list.isEmpty() && list.get(0) instanceof Map) {
+                        doc.add(new Paragraph(formatLabel(entry.getKey())).setBold().setFontSize(12).setFontColor(PRIMARY_COLOR));
+                        doc.add(createDataTable((List<Map<String, Object>>) list));
+                        doc.add(new Paragraph("\n"));
+                    }
+                }
+            }
+
+            doc.close();
+            return baos.toByteArray();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to generate PDF report", e);
+        }
+    }
+
+    /**
+     * Generate generic PDF report from List data.
+     */
+    public byte[] generateListReportPdf(String title, List<Map<String, Object>> data) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            PdfWriter writer = new PdfWriter(baos);
+            PdfDocument pdfDoc = new PdfDocument(writer);
+            Document doc = new Document(pdfDoc, PageSize.A4);
+            doc.setMargins(40, 40, 40, 40);
+
+            doc.add(new Paragraph("MANAMPERI RICE MILL")
+                    .setFontSize(20).setBold().setFontColor(PRIMARY_COLOR).setTextAlignment(TextAlignment.CENTER));
+            doc.add(new Paragraph(title)
+                    .setFontSize(14).setTextAlignment(TextAlignment.CENTER).setFontColor(ColorConstants.GRAY));
+            doc.add(new Paragraph("\n"));
+
+            if (!data.isEmpty()) {
+                doc.add(createDataTable(data));
+            } else {
+                doc.add(new Paragraph("No data available for this report.").setTextAlignment(TextAlignment.CENTER));
+            }
+
+            doc.close();
+            return baos.toByteArray();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to generate PDF list report", e);
+        }
+    }
+
+    private Table createDataTable(List<Map<String, Object>> list) {
+        if (list.isEmpty()) return new Table(1);
+        
+        Map<String, Object> firstRow = list.get(0);
+        int cols = firstRow.size();
+        Table table = new Table(cols).useAllAvailableWidth();
+
+        // Headers
+        for (String key : firstRow.keySet()) {
+            table.addHeaderCell(new Cell()
+                    .add(new Paragraph(formatLabel(key)).setBold().setFontColor(ColorConstants.WHITE).setFontSize(9))
+                    .setBackgroundColor(HEADER_BG)
+                    .setPadding(6)
+                    .setTextAlignment(TextAlignment.CENTER));
+        }
+
+        // Rows
+        for (Map<String, Object> row : list) {
+            for (Object value : row.values()) {
+                table.addCell(new Cell()
+                        .add(new Paragraph(String.valueOf(value)).setFontSize(9))
+                        .setPadding(4)
+                        .setTextAlignment(TextAlignment.CENTER));
+            }
+        }
+        return table;
+    }
+
+    private String formatLabel(String key) {
+        String[] words = key.split("(?=\\p{Upper})");
+        StringBuilder label = new StringBuilder();
+        for (String word : words) {
+            label.append(word.substring(0, 1).toUpperCase()).append(word.substring(1)).append(" ");
+        }
+        return label.toString().trim();
     }
 
     private Cell createInfoCell(String label, String value) {

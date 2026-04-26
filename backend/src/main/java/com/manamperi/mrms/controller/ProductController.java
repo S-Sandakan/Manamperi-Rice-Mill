@@ -55,4 +55,15 @@ public class ProductController {
         product.setDescription(updated.getDescription());
         return ResponseEntity.ok(ApiResponse.success("Product updated", productRepository.save(product)));
     }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Deactivate (soft delete) a product")
+    @SuppressWarnings("null")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new com.manamperi.mrms.exception.ResourceNotFoundException("Product", "id", id));
+        product.setIsActive(false);
+        productRepository.save(product);
+        return ResponseEntity.ok(ApiResponse.success("Product deleted successfully", null));
+    }
 }

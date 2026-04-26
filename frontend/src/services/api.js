@@ -80,6 +80,7 @@ export const productAPI = {
     getSaleable: () => api.get('/products/saleable'),
     create: (data) => api.post('/products', data),
     update: (id, data) => api.put(`/products/${id}`, data),
+    delete: (id) => api.delete(`/products/${id}`),
 };
 
 // ===== SALES API =====

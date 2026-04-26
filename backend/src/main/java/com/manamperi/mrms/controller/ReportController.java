@@ -10,6 +10,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +25,7 @@ import java.util.Map;
 public class ReportController {
 
     private final ReportService reportService;
+    private final com.manamperi.mrms.util.PdfGenerator pdfGenerator;
 
     @GetMapping("/daily-sales")
     @Operation(summary = "Get daily sales report")
@@ -68,5 +72,43 @@ public class ReportController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return ResponseEntity.ok(ApiResponse.success(
                 reportService.getPurchaseHistoryReport(startDate, endDate)));
+    }
+
+    @GetMapping("/{type}/pdf")
+    @Operation(summary = "Export report as PDF")
+    public ResponseEntity<byte[]> exportPdf(
+            @PathVariable String type,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        
+        byte[] pdfBytes;
+        String title = type.replace("-", " ").toUpperCase() + " REPORT";
+        
+        if (type.equals("daily-sales")) {
+            pdfBytes = pdfGenerator.generateReportPdf(title, reportService.getDailySalesReport(date != null ? date : LocalDate.now()));
+        } else if (type.equals("monthly-sales")) {
+            pdfBytes = pdfGenerator.generateReportPdf(title, reportService.getMonthlySalesReport(month != null ? month : LocalDate.now().getMonthValue(), year != null ? year : LocalDate.now().getYear()));
+        } else if (type.equals("production-efficiency")) {
+            pdfBytes = pdfGenerator.generateReportPdf(title, reportService.getProductionEfficiencyReport(startDate, endDate));
+        } else if (type.equals("profit-analysis")) {
+            pdfBytes = pdfGenerator.generateReportPdf(title, reportService.getProfitAnalysisReport(startDate, endDate));
+        } else if (type.equals("stock")) {
+            // Need to cast to Object and then to the specific map if using generateListReportPdf, 
+            // but generateListReportPdf takes List<Map<String,Object>>.
+            // Actually getStockReport returns List<Map<String, Object>> directly.
+            pdfBytes = pdfGenerator.generateListReportPdf(title, reportService.getStockReport());
+        } else if (type.equals("purchase-history")) {
+            pdfBytes = pdfGenerator.generateReportPdf(title, reportService.getPurchaseHistoryReport(startDate, endDate));
+        } else {
+            throw new IllegalArgumentException("Unknown report type: " + type);
+        }
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + type + ".pdf")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdfBytes);
     }
 }
