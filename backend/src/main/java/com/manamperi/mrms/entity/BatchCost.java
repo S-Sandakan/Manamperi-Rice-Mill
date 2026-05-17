@@ -20,6 +20,7 @@ public class BatchCost {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "batch_id", nullable = false, unique = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private ProductionBatch batch;
 
     @Column(name = "vee_cost", nullable = false, precision = 14, scale = 2)

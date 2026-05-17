@@ -58,6 +58,7 @@ public class PurchaseService {
                 .totalAmount(totalAmount)
                 .purchaseDate(request.getPurchaseDate() != null ? request.getPurchaseDate() : LocalDate.now())
                 .notes(request.getNotes())
+                .yieldPercentage(request.getYieldPercentage())
                 .createdBy(user)
                 .isActive(true)
                 .build();

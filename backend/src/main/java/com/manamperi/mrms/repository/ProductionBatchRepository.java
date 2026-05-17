@@ -13,6 +13,7 @@ import java.util.Optional;
 public interface ProductionBatchRepository extends JpaRepository<ProductionBatch, Long> {
     Optional<ProductionBatch> findByBatchId(String batchId);
 
+    @Query("SELECT pb FROM ProductionBatch pb LEFT JOIN FETCH pb.batchCost WHERE pb.isActive = true ORDER BY pb.batchDate DESC")
     List<ProductionBatch> findByIsActiveTrueOrderByBatchDateDesc();
 
     List<ProductionBatch> findByStatusAndIsActiveTrue(ProductionBatch.BatchStatus status);

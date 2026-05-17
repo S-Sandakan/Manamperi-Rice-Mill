@@ -20,4 +20,8 @@ public class PurchaseRequest {
 
     private LocalDate purchaseDate;
     private String notes;
+
+    @DecimalMin(value = "0.01", message = "Yield percentage must be greater than 0")
+    @DecimalMax(value = "100.00", message = "Yield percentage cannot exceed 100")
+    private BigDecimal yieldPercentage;
 }

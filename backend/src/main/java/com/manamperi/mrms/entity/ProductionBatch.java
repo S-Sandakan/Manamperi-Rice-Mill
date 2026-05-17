@@ -31,6 +31,9 @@ public class ProductionBatch {
     @Column(name = "kudu_output_kg", precision = 12, scale = 2)
     private BigDecimal kuduOutputKg;
 
+    @Column(name = "rice_bran_output_kg", precision = 12, scale = 2)
+    private BigDecimal riceBranOutputKg;
+
     @Column(name = "yield_percentage", precision = 5, scale = 2)
     private BigDecimal yieldPercentage;
 

@@ -10,7 +10,7 @@ const Purchases = () => {
     const [showForm, setShowForm] = useState(false);
     const [filters, setFilters] = useState({ supplierId: '', startDate: '', endDate: '' });
     const [form, setForm] = useState({
-        supplierId: '', veeQuantityKg: '', pricePerKg: '', purchaseDate: new Date().toISOString().split('T')[0], notes: '',
+        supplierId: '', veeQuantityKg: '', pricePerKg: '', purchaseDate: new Date().toISOString().split('T')[0], notes: '', yieldPercentage: '',
     });
 
     useEffect(() => {
@@ -29,15 +29,9 @@ const Purchases = () => {
             ]);
             setPurchases(purchRes.data.data || []);
             setSuppliers(suppRes.data.data || []);
-        } catch {
-            setPurchases([
-                { id: 1, supplier: { name: 'Sunil Fernando' }, veeQuantityKg: 2000, pricePerKg: 85, totalAmount: 170000, purchaseDate: '2026-04-20' },
-                { id: 2, supplier: { name: 'Mahinda Rajapaksa' }, veeQuantityKg: 3000, pricePerKg: 82, totalAmount: 246000, purchaseDate: '2026-04-19' },
-            ]);
-            setSuppliers([
-                { id: 1, name: 'Sunil Fernando' }, { id: 2, name: 'Mahinda Rajapaksa' },
-                { id: 3, name: 'Anura Bandara' }, { id: 4, name: 'Chaminda Jayawardena' },
-            ]);
+        } catch (err) {
+            toast.error('Failed to load purchases. Make sure the backend is running.');
+            console.error('Fetch error:', err);
         } finally {
             setLoading(false);
         }
@@ -51,10 +45,11 @@ const Purchases = () => {
                 supplierId: parseInt(form.supplierId),
                 veeQuantityKg: parseFloat(form.veeQuantityKg),
                 pricePerKg: parseFloat(form.pricePerKg),
+                yieldPercentage: form.yieldPercentage ? parseFloat(form.yieldPercentage) : null,
             });
             toast.success('Purchase recorded successfully');
             setShowForm(false);
-            setForm({ supplierId: '', veeQuantityKg: '', pricePerKg: '', purchaseDate: new Date().toISOString().split('T')[0], notes: '' });
+            setForm({ supplierId: '', veeQuantityKg: '', pricePerKg: '', purchaseDate: new Date().toISOString().split('T')[0], notes: '', yieldPercentage: '' });
             fetchData();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Failed to record purchase');
@@ -105,6 +100,10 @@ const Purchases = () => {
                             <input type="text" value={form.veeQuantityKg && form.pricePerKg ? formatCurrency(form.veeQuantityKg * form.pricePerKg) : 'Rs. 0.00'} className="input opacity-60" readOnly />
                         </div>
                         <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-1.5">Yield Percentage (%)</label>
+                            <input type="number" step="0.01" min="0" max="100" value={form.yieldPercentage} onChange={(e) => setForm({ ...form, yieldPercentage: e.target.value })} className="input" placeholder="e.g. 65.50" />
+                        </div>
+                        <div>
                             <label className="block text-sm font-medium text-gray-300 mb-1.5">Notes</label>
                             <input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="input" placeholder="Optional" />
                         </div>
@@ -130,6 +129,7 @@ const Purchases = () => {
                                 <th>Quantity (kg)</th>
                                 <th>Price/kg</th>
                                 <th>Total</th>
+                                <th>Yield %</th>
                                 <th>Date</th>
                             </tr>
                         </thead>
@@ -141,11 +141,14 @@ const Purchases = () => {
                                     <td>{(p.veeQuantityKg || 0).toLocaleString()} kg</td>
                                     <td>{formatCurrency(p.pricePerKg || 0)}</td>
                                     <td className="font-semibold text-green-400">{formatCurrency(p.totalAmount || 0)}</td>
+                                    <td className={p.yieldPercentage ? (p.yieldPercentage >= 60 ? 'text-green-400' : 'text-yellow-400') : 'text-gray-500'}>
+                                        {p.yieldPercentage ? `${p.yieldPercentage}%` : '—'}
+                                    </td>
                                     <td className="text-gray-400">{p.purchaseDate}</td>
                                 </tr>
                             ))}
                             {purchases.length === 0 && (
-                                <tr><td colSpan="6" className="text-center text-gray-500 py-8">No purchases found</td></tr>
+                                <tr><td colSpan="7" className="text-center text-gray-500 py-8">No purchases found</td></tr>
                             )}
                         </tbody>
                     </table>

@@ -15,7 +15,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/production")
@@ -38,25 +37,32 @@ public class ProductionController {
     }
 
     @PostMapping("/batches")
-    @Operation(summary = "Create a new production batch")
+    @Operation(summary = "Record a completed production batch")
     @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCTION_MANAGER')")
     public ResponseEntity<ApiResponse<ProductionBatch>> createBatch(
             @Valid @RequestBody ProductionBatchRequest request,
             @AuthenticationPrincipal CustomUserDetails user) {
         ProductionBatch batch = productionService.createBatch(request, user.getId());
-        return ResponseEntity.ok(ApiResponse.success("Batch created: " + batch.getBatchId(), batch));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Batch " + batch.getBatchId() + " recorded. Yield: " + batch.getYieldPercentage() + "%", batch));
     }
 
-    @PutMapping("/batches/{id}/complete")
-    @Operation(summary = "Complete a production batch with output quantities")
+    @PutMapping("/batches/{id}")
+    @Operation(summary = "Update a production batch")
     @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCTION_MANAGER')")
-    public ResponseEntity<ApiResponse<ProductionBatch>> completeBatch(
+    public ResponseEntity<ApiResponse<ProductionBatch>> updateBatch(
             @PathVariable Long id,
-            @RequestBody Map<String, Object> body) {
-        java.math.BigDecimal sahalOutput = new java.math.BigDecimal(body.get("sahalOutputKg").toString());
-        java.math.BigDecimal kuduOutput = new java.math.BigDecimal(body.get("kuduOutputKg").toString());
-        ProductionBatch batch = productionService.completeBatch(id, sahalOutput, kuduOutput);
-        return ResponseEntity
-                .ok(ApiResponse.success("Batch completed. Yield: " + batch.getYieldPercentage() + "%", batch));
+            @Valid @RequestBody ProductionBatchRequest request) {
+        ProductionBatch batch = productionService.updateBatch(id, request);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Batch " + batch.getBatchId() + " updated. Yield: " + batch.getYieldPercentage() + "%", batch));
+    }
+
+    @DeleteMapping("/batches/{id}")
+    @Operation(summary = "Delete a production batch (soft delete)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PRODUCTION_MANAGER')")
+    public ResponseEntity<ApiResponse<Void>> deleteBatch(@PathVariable Long id) {
+        productionService.deleteBatch(id);
+        return ResponseEntity.ok(ApiResponse.success("Batch deleted successfully", null));
     }
 }

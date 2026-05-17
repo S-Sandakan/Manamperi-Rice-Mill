@@ -45,8 +45,15 @@ public class ProductionService {
     }
 
     /**
-     * Create a new production batch (IN_PROGRESS state).
-     * Validates that sufficient Vee stock is available.
+     * Create a completed production batch in a single step.
+     * This is the main workflow: after milling is physically done,
+     * the user enters vee input, sahal output, kudu output, and rice bran output.
+     * 
+     * The system:
+     * 1. Validates sufficient Vee stock
+     * 2. Creates a COMPLETED batch with yield calculation
+     * 3. Deducts Vee from stock
+     * 4. Adds Sahal, Kudu output to stock
      */
     @Transactional
     @SuppressWarnings("null")
@@ -67,14 +74,39 @@ public class ProductionService {
                     request.getVeeInputKg(), veeStock.getQuantity());
         }
 
+        // Validate output doesn't exceed input
+        BigDecimal totalOutput = request.getSahalOutputKg()
+                .add(request.getKuduOutputKg())
+                .add(request.getRiceBranOutputKg() != null ? request.getRiceBranOutputKg() : BigDecimal.ZERO);
+        if (totalOutput.compareTo(request.getVeeInputKg()) > 0) {
+            throw new BadRequestException("Total output (" + totalOutput + " kg) cannot exceed Vee input (" + request.getVeeInputKg() + " kg)");
+        }
+
+        // Calculate yield: (Sahal Output / Vee Input) × 100
+        BigDecimal yieldPercentage = request.getSahalOutputKg()
+                .divide(request.getVeeInputKg(), 4, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("100"))
+                .setScale(2, RoundingMode.HALF_UP);
+
+        ProductionBatch.Efficiency efficiency = yieldPercentage.compareTo(EFFICIENCY_THRESHOLD) >= 0
+                ? ProductionBatch.Efficiency.EFFICIENT
+                : ProductionBatch.Efficiency.INEFFICIENT;
+
         // Generate batch ID: BATCH-YYYYMMDD-001
         String batchId = generateBatchId(batchDate);
 
+        // Create batch as COMPLETED directly
         ProductionBatch batch = ProductionBatch.builder()
                 .batchId(batchId)
                 .veeInputKg(request.getVeeInputKg())
-                .status(ProductionBatch.BatchStatus.IN_PROGRESS)
+                .sahalOutputKg(request.getSahalOutputKg())
+                .kuduOutputKg(request.getKuduOutputKg())
+                .riceBranOutputKg(request.getRiceBranOutputKg())
+                .yieldPercentage(yieldPercentage)
+                .efficiency(efficiency)
+                .status(ProductionBatch.BatchStatus.COMPLETED)
                 .batchDate(batchDate)
+                .completedAt(LocalDateTime.now())
                 .notes(request.getNotes())
                 .createdBy(user)
                 .isActive(true)
@@ -93,57 +125,16 @@ public class ProductionService {
                 .build();
         batchCostRepository.save(batchCost);
 
-        return batch;
-    }
-
-    /**
-     * Complete a production batch with output quantities.
-     * CRITICAL: Calculates yield, updates efficiency, adjusts stock.
-     */
-    @Transactional
-    @SuppressWarnings("null")
-    public ProductionBatch completeBatch(Long batchId, BigDecimal sahalOutputKg, BigDecimal kuduOutputKg) {
-        ProductionBatch batch = getBatchById(batchId);
-
-        if (batch.getStatus() != ProductionBatch.BatchStatus.IN_PROGRESS) {
-            throw new BadRequestException("Batch " + batch.getBatchId() + " is not in progress");
-        }
-
-        // Critical yield calculation: Yield % = (Sahal Output / Vee Input) × 100
-        BigDecimal yieldPercentage = sahalOutputKg
-                .divide(batch.getVeeInputKg(), 4, RoundingMode.HALF_UP)
-                .multiply(new BigDecimal("100"))
-                .setScale(2, RoundingMode.HALF_UP);
-
-        ProductionBatch.Efficiency efficiency = yieldPercentage.compareTo(EFFICIENCY_THRESHOLD) >= 0
-                ? ProductionBatch.Efficiency.EFFICIENT
-                : ProductionBatch.Efficiency.INEFFICIENT;
-
-        batch.setSahalOutputKg(sahalOutputKg);
-        batch.setKuduOutputKg(kuduOutputKg);
-        batch.setYieldPercentage(yieldPercentage);
-        batch.setEfficiency(efficiency);
-        batch.setStatus(ProductionBatch.BatchStatus.COMPLETED);
-        batch.setCompletedAt(LocalDateTime.now());
-
-        User user = batch.getCreatedBy();
-
         // ===== STOCK ADJUSTMENTS =====
-        // 1. Deduct Vee stock
-        Product veeProduct = productRepository.findById(1L).orElseThrow();
-        Stock veeStock = stockRepository.findByProductId(veeProduct.getId()).orElseThrow();
 
-        if (veeStock.getQuantity().compareTo(batch.getVeeInputKg()) < 0) {
-            throw new InsufficientStockException("Raw Paddy (Vee)",
-                    batch.getVeeInputKg(), veeStock.getQuantity());
-        }
-        veeStock.setQuantity(veeStock.getQuantity().subtract(batch.getVeeInputKg()));
+        // 1. Deduct Vee stock
+        veeStock.setQuantity(veeStock.getQuantity().subtract(request.getVeeInputKg()));
         stockRepository.save(veeStock);
 
         stockMovementRepository.save(StockMovement.builder()
                 .product(veeProduct)
                 .movementType(StockMovement.MovementType.PRODUCTION_OUT)
-                .quantity(batch.getVeeInputKg())
+                .quantity(request.getVeeInputKg())
                 .referenceType("BATCH")
                 .referenceId(batch.getId())
                 .reason("Batch " + batch.getBatchId() + " - Vee consumed")
@@ -151,19 +142,15 @@ public class ProductionService {
                 .movementDate(LocalDateTime.now())
                 .build());
 
-        // 2. Increase Sahal stock — distribute across Sahal products based on kg
-        // For simplicity, we add to a bulk Sahal product (first SAHAL product that
-        // isn't Vee)
+        // 2. Increase Sahal stock
         List<Product> sahalProducts = productRepository.findByProductTypeAndIsActiveTrue(Product.ProductType.SAHAL);
-        // Find the bulk/generic sahal product or use the largest one
         for (Product sp : sahalProducts) {
-            if (sp.getId() != 1L) { // Not raw paddy
+            if (sp.getId() != 1L) {
                 Stock sahalStock = stockRepository.findByProductId(sp.getId())
                         .orElseGet(() -> Stock.builder().product(sp).quantity(BigDecimal.ZERO)
                                 .minQuantity(BigDecimal.TEN).build());
-                // Add proportional stock based on packet size
                 if (sp.getPacketSizeKg() != null && sp.getPacketSizeKg().compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal additionalPackets = sahalOutputKg.divide(sp.getPacketSizeKg(), 0, RoundingMode.FLOOR);
+                    BigDecimal additionalPackets = request.getSahalOutputKg().divide(sp.getPacketSizeKg(), 0, RoundingMode.FLOOR);
                     if (additionalPackets.compareTo(BigDecimal.ZERO) > 0) {
                         sahalStock.setQuantity(sahalStock.getQuantity().add(additionalPackets));
                         stockRepository.save(sahalStock);
@@ -178,7 +165,6 @@ public class ProductionService {
                                 .performedBy(user)
                                 .movementDate(LocalDateTime.now())
                                 .build());
-                        // Only add to the largest packet product to avoid double counting
                         break;
                     }
                 }
@@ -192,13 +178,13 @@ public class ProductionService {
             Stock kuduStock = stockRepository.findByProductId(kuduProduct.getId())
                     .orElseGet(() -> Stock.builder().product(kuduProduct).quantity(BigDecimal.ZERO)
                             .minQuantity(new BigDecimal("200")).build());
-            kuduStock.setQuantity(kuduStock.getQuantity().add(kuduOutputKg));
+            kuduStock.setQuantity(kuduStock.getQuantity().add(request.getKuduOutputKg()));
             stockRepository.save(kuduStock);
 
             stockMovementRepository.save(StockMovement.builder()
                     .product(kuduProduct)
                     .movementType(StockMovement.MovementType.PRODUCTION_IN)
-                    .quantity(kuduOutputKg)
+                    .quantity(request.getKuduOutputKg())
                     .referenceType("BATCH")
                     .referenceId(batch.getId())
                     .reason("Batch " + batch.getBatchId() + " - Kudu by-product")
@@ -207,7 +193,7 @@ public class ProductionService {
                     .build());
         }
 
-        return batchRepository.save(batch);
+        return batch;
     }
 
     private String generateBatchId(LocalDate date) {
@@ -217,12 +203,60 @@ public class ProductionService {
     }
 
     private BigDecimal calculateVeeCost(BigDecimal veeInputKg) {
-        // Calculate based on latest average purchase price
-        // Simple approach: use average of recent prices
-        return veeInputKg.multiply(new BigDecimal("85.00")); // Fallback default
+        return veeInputKg.multiply(new BigDecimal("85.00"));
     }
 
     public Double getAverageYield(LocalDate start, LocalDate end) {
         return batchRepository.getAverageYield(start, end);
+    }
+
+    /**
+     * Update a production batch's output data and recalculate yield/efficiency.
+     */
+    @Transactional
+    @SuppressWarnings("null")
+    public ProductionBatch updateBatch(Long batchId, ProductionBatchRequest request) {
+        ProductionBatch batch = getBatchById(batchId);
+
+        // Validate output doesn't exceed input
+        BigDecimal veeInput = request.getVeeInputKg();
+        BigDecimal totalOutput = request.getSahalOutputKg()
+                .add(request.getKuduOutputKg())
+                .add(request.getRiceBranOutputKg() != null ? request.getRiceBranOutputKg() : BigDecimal.ZERO);
+        if (totalOutput.compareTo(veeInput) > 0) {
+            throw new BadRequestException("Total output (" + totalOutput + " kg) cannot exceed Vee input (" + veeInput + " kg)");
+        }
+
+        // Recalculate yield
+        BigDecimal yieldPercentage = request.getSahalOutputKg()
+                .divide(veeInput, 4, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("100"))
+                .setScale(2, RoundingMode.HALF_UP);
+
+        ProductionBatch.Efficiency efficiency = yieldPercentage.compareTo(EFFICIENCY_THRESHOLD) >= 0
+                ? ProductionBatch.Efficiency.EFFICIENT
+                : ProductionBatch.Efficiency.INEFFICIENT;
+
+        // Update batch fields
+        batch.setVeeInputKg(veeInput);
+        batch.setSahalOutputKg(request.getSahalOutputKg());
+        batch.setKuduOutputKg(request.getKuduOutputKg());
+        batch.setRiceBranOutputKg(request.getRiceBranOutputKg());
+        batch.setYieldPercentage(yieldPercentage);
+        batch.setEfficiency(efficiency);
+        batch.setBatchDate(request.getBatchDate() != null ? request.getBatchDate() : batch.getBatchDate());
+        batch.setNotes(request.getNotes());
+
+        return batchRepository.save(batch);
+    }
+
+    /**
+     * Soft-delete a production batch (set isActive = false).
+     */
+    @Transactional
+    public void deleteBatch(Long batchId) {
+        ProductionBatch batch = getBatchById(batchId);
+        batch.setIsActive(false);
+        batchRepository.save(batch);
     }
 }

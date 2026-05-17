@@ -41,6 +41,9 @@ public class Purchase {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    @Column(name = "yield_percentage", precision = 5, scale = 2)
+    private BigDecimal yieldPercentage;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false)
     @JsonIgnore

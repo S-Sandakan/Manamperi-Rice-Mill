@@ -63,7 +63,8 @@ export const supplierAPI = {
 export const productionAPI = {
     getBatches: (params) => api.get('/production/batches', { params }),
     createBatch: (data) => api.post('/production/batches', data),
-    completeBatch: (id, data) => api.put(`/production/batches/${id}/complete`, data),
+    updateBatch: (id, data) => api.put(`/production/batches/${id}`, data),
+    deleteBatch: (id) => api.delete(`/production/batches/${id}`),
 };
 
 // ===== INVENTORY API =====

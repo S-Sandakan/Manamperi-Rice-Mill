@@ -11,9 +11,10 @@ import java.util.List;
 
 @Repository
 public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
+    @Query("SELECT p FROM Purchase p JOIN FETCH p.supplier WHERE p.isActive = true ORDER BY p.purchaseDate DESC")
     List<Purchase> findByIsActiveTrueOrderByPurchaseDateDesc();
 
-    @Query("SELECT p FROM Purchase p WHERE p.isActive = true " +
+    @Query("SELECT p FROM Purchase p JOIN FETCH p.supplier WHERE p.isActive = true " +
             "AND (:supplierId IS NULL OR p.supplier.id = :supplierId) " +
             "AND (:startDate IS NULL OR p.purchaseDate >= :startDate) " +
             "AND (:endDate IS NULL OR p.purchaseDate <= :endDate) " +
